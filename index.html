@@ -1,0 +1,1405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Asciicraft — Image to ASCII Art</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Crimson+Pro:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #06080d;
+    --bg2:       #0b1018;
+    --surface:   #11161f;
+    --surface2:  #181f2a;
+    --border:    #2b3443;
+    --gold:      #4e88ff;
+    --gold2:     #8eb7ff;
+    --cream:     #edf2fb;
+    --cream2:    #cbd5e1;
+    --muted:     #7e8aa0;
+    --shadow:    rgba(0,0,0,0.72);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--cream);
+    font-family: 'Crimson Pro', Georgia, serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* Noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.08'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
+  /* Ambient radial glow */
+  body::after {
+    content: '';
+    position: fixed;
+    top: -20%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80vw;
+    height: 60vh;
+    background: radial-gradient(ellipse, rgba(78,136,255,0.12) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .cursor-glow {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 320px;
+    height: 320px;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, rgba(78,136,255,0.30) 0%, rgba(78,136,255,0.16) 28%, rgba(78,136,255,0.07) 50%, rgba(78,136,255,0.02) 65%, transparent 74%);
+    filter: blur(22px);
+    transition: opacity 0.2s ease-out;
+    will-change: transform, opacity;
+  }
+
+  .cursor-glow.active {
+    opacity: 1;
+  }
+
+  .page {
+    position: relative;
+    z-index: 1;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px 80px;
+  }
+
+  body.dragging-ui {
+    user-select: none;
+  }
+
+  [data-draggable] {
+    will-change: transform;
+    transform: translate3d(0, 0, 0) rotate(0deg);
+    transition: transform 520ms cubic-bezier(.22,1,.36,1);
+  }
+
+  [data-draggable].dragging {
+    transition: none;
+    z-index: 20;
+  }
+
+  /* ── Header ── */
+  header {
+    text-align: center;
+    padding: 56px 0 40px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 48px;
+  }
+
+  .logo-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: 10px;
+  }
+
+  .logo-icon {
+    width: 44px;
+    height: 44px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 3px;
+    transform: rotate(0deg);
+    animation: wiggle 6s ease-in-out infinite;
+  }
+
+  .logo-icon span {
+    border-radius: 2px;
+    animation: colorCycle 4s ease-in-out infinite;
+  }
+  .logo-icon span:nth-child(1)  { background: var(--gold2); animation-delay: 0s; }
+  .logo-icon span:nth-child(2)  { background: var(--surface2); animation-delay: .1s; }
+  .logo-icon span:nth-child(3)  { background: var(--gold); animation-delay: .2s; }
+  .logo-icon span:nth-child(4)  { background: var(--surface2); animation-delay: .3s; }
+  .logo-icon span:nth-child(5)  { background: var(--muted); animation-delay: .4s; }
+  .logo-icon span:nth-child(6)  { background: var(--gold2); animation-delay: .5s; }
+  .logo-icon span:nth-child(7)  { background: var(--surface2); animation-delay: .6s; }
+  .logo-icon span:nth-child(8)  { background: var(--gold); animation-delay: .7s; }
+  .logo-icon span:nth-child(9)  { background: var(--gold); animation-delay: .8s; }
+  .logo-icon span:nth-child(10) { background: var(--surface2); animation-delay: .9s; }
+  .logo-icon span:nth-child(11) { background: var(--gold2); animation-delay: 1s; }
+  .logo-icon span:nth-child(12) { background: var(--muted); animation-delay: 1.1s; }
+  .logo-icon span:nth-child(13) { background: var(--surface2); animation-delay: 1.2s; }
+  .logo-icon span:nth-child(14) { background: var(--gold); animation-delay: 1.3s; }
+  .logo-icon span:nth-child(15) { background: var(--muted); animation-delay: 1.4s; }
+  .logo-icon span:nth-child(16) { background: var(--gold2); animation-delay: 1.5s; }
+
+  @keyframes wiggle {
+    0%,100% { transform: rotate(-2deg); }
+    50%      { transform: rotate(2deg); }
+  }
+  @keyframes colorCycle {
+    0%,100% { opacity: 1; }
+    50%      { opacity: 0.5; }
+  }
+
+  h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2.4rem, 6vw, 3.8rem);
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, var(--gold2) 0%, var(--cream) 50%, var(--gold) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.1;
+  }
+
+  .tagline {
+    color: var(--muted);
+    font-size: 1.05rem;
+    font-style: italic;
+    margin-top: 8px;
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Main layout ── */
+  .workspace {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+    margin-bottom: 28px;
+  }
+  @media (max-width: 640px) {
+    .workspace { grid-template-columns: 1fr; }
+  }
+
+  /* ── Panel ── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 8px 32px var(--shadow), inset 0 1px 0 rgba(142,183,255,0.10);
+  }
+
+  .panel-header {
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--gold);
+    opacity: 0.6;
+  }
+
+  .panel-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.82rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--gold);
+    font-weight: 400;
+  }
+
+  .panel-body {
+    padding: 20px;
+    min-height: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ── Drop Zone ── */
+  .drop-zone {
+    width: 100%;
+    min-height: 260px;
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    text-align: center;
+    padding: 28px 20px;
+  }
+
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--gold);
+    background: rgba(200,146,42,0.05);
+  }
+
+  .drop-icon {
+    font-size: 2.8rem;
+    line-height: 1;
+    filter: grayscale(0.3);
+  }
+
+  .drop-text {
+    color: var(--muted);
+    font-size: 1rem;
+    font-style: italic;
+  }
+  .drop-text strong {
+    color: var(--gold2);
+    font-style: normal;
+  }
+
+  .drop-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--cream2);
+    padding: 8px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: 'Crimson Pro', serif;
+    font-size: 0.95rem;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .drop-btn:hover {
+    background: var(--border);
+    border-color: var(--gold);
+    color: var(--gold2);
+  }
+
+  #fileInput { display: none; }
+
+  /* ── Preview images ── */
+  .img-preview {
+    max-width: 100%;
+    max-height: 260px;
+    object-fit: contain;
+    border-radius: 4px;
+    display: block;
+  }
+
+  /* ── ASCII output ── */
+  #asciiOutput {
+    width: 100%;
+    min-height: 260px;
+    max-height: 420px;
+    overflow: auto;
+    display: none;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #090d14;
+    color: var(--gold2);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 8px;
+    line-height: 0.85;
+    letter-spacing: 0.04em;
+    white-space: pre;
+    tab-size: 2;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+
+  .placeholder-text {
+    color: var(--muted);
+    font-style: italic;
+    text-align: center;
+    font-size: 1rem;
+  }
+
+  /* ── Controls ── */
+  .controls {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 28px;
+    box-shadow: 0 8px 32px var(--shadow), inset 0 1px 0 rgba(142,183,255,0.10);
+    margin-bottom: 28px;
+  }
+
+  .controls-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 24px;
+  }
+
+  .control-group label {
+    display: block;
+    font-family: 'Playfair Display', serif;
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 10px;
+  }
+
+  .slider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  input[type=range] {
+    flex: 1;
+    appearance: none;
+    -webkit-appearance: none;
+    height: 4px;
+    background: var(--surface2);
+    border-radius: 2px;
+    outline: none;
+    border: 1px solid var(--border);
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px;
+    background: var(--gold);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(200,146,42,0.5);
+    transition: background 0.15s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover {
+    background: var(--gold2);
+  }
+
+  .slider-val {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.95rem;
+    color: var(--gold2);
+    min-width: 36px;
+    text-align: right;
+  }
+
+  select {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--cream);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-family: 'Crimson Pro', serif;
+    font-size: 0.95rem;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  select:hover, select:focus { border-color: var(--gold); }
+  select option { background: var(--surface2); }
+
+  /* ── Action buttons ── */
+  .actions {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .btn {
+    font-family: 'Playfair Display', serif;
+    font-size: 1rem;
+    padding: 13px 32px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.04em;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--gold) 0%, #a07020 100%);
+    color: var(--bg);
+    box-shadow: 0 4px 20px rgba(78,136,255,0.28);
+    font-weight: 700;
+  }
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(78,136,255,0.42);
+  }
+  .btn-primary:active { transform: translateY(0); }
+
+  .btn-secondary {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--cream2);
+  }
+  .btn-secondary:hover {
+    border-color: var(--gold);
+    color: var(--gold2);
+    transform: translateY(-1px);
+  }
+
+  .btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none !important;
+  }
+
+  .save-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin: 22px 0 28px;
+    box-shadow: 0 8px 28px var(--shadow), inset 0 1px 0 rgba(142,183,255,0.08);
+  }
+
+  .save-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .save-field label,
+  .archive-head label {
+    display: block;
+    font-family: 'Playfair Display', serif;
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 10px;
+  }
+
+  .text-input,
+  .search-input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--cream);
+    padding: 11px 14px;
+    border-radius: 8px;
+    font-family: 'Crimson Pro', serif;
+    font-size: 0.98rem;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .text-input:focus,
+  .search-input:focus {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 3px rgba(78,136,255,0.14);
+  }
+
+  .save-actions {
+    justify-content: flex-start;
+  }
+
+  .save-note {
+    margin-top: 14px;
+    color: var(--muted);
+    font-size: 0.95rem;
+    font-style: italic;
+  }
+
+  .archive-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px;
+    box-shadow: 0 10px 30px var(--shadow), inset 0 1px 0 rgba(142,183,255,0.08);
+    margin: 34px 0 28px;
+  }
+
+  .archive-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+    gap: 18px;
+    align-items: end;
+    margin-bottom: 18px;
+  }
+
+  .archive-title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.4rem, 4vw, 2rem);
+    color: var(--cream);
+  }
+
+  .archive-subtitle {
+    color: var(--muted);
+    font-style: italic;
+    margin-top: 6px;
+  }
+
+  .archive-list {
+    display: grid;
+    gap: 16px;
+    max-height: 900px;
+    overflow-y: auto;
+    padding-right: 6px;
+  }
+
+  .archive-item {
+    background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+    border: 1px solid rgba(142,183,255,0.12);
+    border-radius: 12px;
+    padding: 16px;
+  }
+
+  .archive-item-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 10px;
+  }
+
+  .archive-item-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.12rem;
+    color: var(--cream);
+  }
+
+  .archive-meta {
+    color: var(--muted);
+    font-size: 0.92rem;
+    font-style: italic;
+    margin-top: 4px;
+  }
+
+  .tag-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+
+  .tag-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(78,136,255,0.12);
+    color: var(--gold2);
+    border: 1px solid rgba(78,136,255,0.18);
+    font-size: 0.86rem;
+  }
+
+  .archive-preview {
+    margin: 0;
+    padding: 12px 14px;
+    background: #090d14;
+    border: 1px solid rgba(142,183,255,0.10);
+    border-radius: 10px;
+    color: var(--gold2);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 9px;
+    line-height: 1;
+    white-space: pre;
+    overflow: auto;
+    max-height: 210px;
+  }
+
+  .archive-item-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+  }
+
+  .archive-empty {
+    color: var(--muted);
+    font-style: italic;
+    text-align: center;
+    padding: 26px 10px 6px;
+  }
+
+  @media (max-width: 700px) {
+    .archive-head {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* ── Processing overlay ── */
+  .processing {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(6,8,13,0.88);
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 14px;
+    border-radius: 12px;
+    z-index: 10;
+  }
+  .processing.show { display: flex; }
+
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid var(--border);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .processing p {
+    font-style: italic;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+
+  /* ── Divider ornament ── */
+  .ornament {
+    text-align: center;
+    color: var(--border);
+    font-size: 1.2rem;
+    margin: 4px 0 16px;
+    letter-spacing: 0.3em;
+  }
+
+  /* ── Footer ── */
+  footer {
+    text-align: center;
+    padding-top: 40px;
+    border-top: 1px solid var(--border);
+    margin-top: 60px;
+    color: var(--muted);
+    font-style: italic;
+    font-size: 0.9rem;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--surface2);
+    border: 1px solid var(--gold);
+    color: var(--gold2);
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-family: 'Playfair Display', serif;
+    font-size: 0.9rem;
+    transition: transform 0.35s cubic-bezier(.34,1.56,.64,1);
+    z-index: 100;
+    box-shadow: 0 8px 24px var(--shadow);
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  @media (pointer: coarse) {
+    .cursor-glow {
+      display: none;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="cursor-glow" id="cursorGlow" aria-hidden="true"></div>
+
+<div class="page">
+
+  <header>
+    <div class="logo-row">
+      <div class="logo-icon">
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <h1>Asciicraft</h1>
+    </div>
+    <p class="tagline">Transform your images into luminous ASCII art</p>
+  </header>
+
+  <!-- Workspace: original + output -->
+  <div class="workspace">
+
+    <!-- Input panel -->
+    <div class="panel" data-draggable>
+      <div class="panel-header">
+        <div class="panel-dot"></div>
+        <span class="panel-title">Original Image</span>
+      </div>
+      <div class="panel-body" id="inputPanelBody">
+        <div class="drop-zone" id="dropZone">
+          <div class="drop-icon">🖼️</div>
+          <p class="drop-text">Drop your image here<br><strong>or click to browse</strong></p>
+          <button class="drop-btn" onclick="document.getElementById('fileInput').click()">Choose File</button>
+        </div>
+        <img id="originalImg" class="img-preview" style="display:none;" alt="Original">
+        <input type="file" id="fileInput" accept="image/*">
+      </div>
+    </div>
+
+    <!-- Output panel -->
+    <div class="panel" id="outputPanel" data-draggable>
+      <div class="panel-header">
+        <div class="panel-dot"></div>
+        <span class="panel-title">ASCII Output</span>
+      </div>
+      <div class="panel-body" id="outputPanelBody">
+        <p class="placeholder-text" id="outputPlaceholder">Your ASCII art will<br>appear here ✦</p>
+        <pre id="asciiOutput" aria-label="ASCII art output"></pre>
+      </div>
+      <div class="processing" id="processingOverlay">
+        <div class="spinner"></div>
+        <p>Rendering ASCII…</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Controls -->
+  <div class="controls" data-draggable>
+    <div class="ornament">✦ ✦ ✦</div>
+    <div class="controls-grid">
+
+      <div class="control-group">
+        <label>Character Width</label>
+        <div class="slider-wrap">
+          <input type="range" id="asciiWidth" min="40" max="180" value="96" step="4">
+          <span class="slider-val" id="asciiWidthVal">96</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Character Set</label>
+        <select id="charset">
+          <option value="classic">Classic</option>
+          <option value="dense">Dense Detail</option>
+          <option value="blocks">Blocky</option>
+          <option value="minimal">Minimal</option>
+          <option value="binary">Binary</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Brightness Bias</label>
+        <div class="slider-wrap">
+          <input type="range" id="brightness" min="-80" max="80" value="0" step="5">
+          <span class="slider-val" id="brightnessVal">0</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Contrast</label>
+        <div class="slider-wrap">
+          <input type="range" id="contrast" min="50" max="180" value="110" step="5">
+          <span class="slider-val" id="contrastVal">110%</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="actions" data-draggable>
+    <button class="btn btn-primary" id="convertBtn" disabled onclick="convert()">✦ Render ASCII</button>
+    <button class="btn btn-secondary" id="downloadBtn" disabled onclick="downloadArt()">⬇ Download TXT</button>
+    <button class="btn btn-secondary" id="resetBtn" onclick="reset()">↺ Reset</button>
+  </div>
+
+  <div class="save-panel">
+    <div class="save-grid">
+      <div class="save-field">
+        <label for="artName">Art Name</label>
+        <input class="text-input" id="artName" type="text" maxlength="80" placeholder="Neon Alley Study">
+      </div>
+      <div class="save-field">
+        <label for="artTags">Tags</label>
+        <input class="text-input" id="artTags" type="text" maxlength="140" placeholder="#city #night #portrait">
+      </div>
+    </div>
+    <div class="actions save-actions">
+      <button class="btn btn-primary" id="saveBtn" disabled>⬆ Upload Art</button>
+    </div>
+    <p class="save-note" id="saveStatus">Upload the current ASCII art to the shared archive. The server saves a TXT file beside this HTML page.</p>
+  </div>
+
+  <section class="archive-section" id="archiveSection">
+    <div class="archive-head">
+      <div>
+        <h2 class="archive-title">Saved Works</h2>
+        <p class="archive-subtitle">Scroll down to revisit, search, and reload saved ASCII pieces.</p>
+      </div>
+      <div>
+        <label for="archiveSearch">Search</label>
+        <input class="search-input" id="archiveSearch" type="search" placeholder="Search names, #tags, or text">
+      </div>
+    </div>
+    <div class="archive-list" id="archiveList"></div>
+    <p class="archive-empty" id="archiveEmpty">No saved art yet. Render something, name it, add tags, and save it.</p>
+  </section>
+
+  <footer>
+    Crafted with warmth · All processing happens in your browser · No images are uploaded
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Hidden canvas for processing -->
+<canvas id="workCanvas" style="display:none;"></canvas>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────
+let sourceImage = null;
+let currentAsciiArt = '';
+let archiveEntries = [];
+let archiveMode = 'server';
+
+const ARCHIVE_STORAGE_KEY = 'asciicraft-offline-archive-v1';
+
+const CHARSETS = {
+  classic: '@%#*+=-:. ',
+  dense: '$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\\|()1{}[]?-_+~<>i!lI;:,"^`\'. ',
+  blocks: '█▓▒░ ',
+  minimal: '@#*:. ',
+  binary: '10 '
+};
+
+// ── File input / drag-drop ──────────────────────────────────────────────
+const cursorGlow = document.getElementById('cursorGlow');
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const originalImg = document.getElementById('originalImg');
+const convertBtn = document.getElementById('convertBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const saveBtn = document.getElementById('saveBtn');
+const asciiOutput = document.getElementById('asciiOutput');
+const workCanvas = document.getElementById('workCanvas');
+const processing = document.getElementById('processingOverlay');
+const outputPlaceholder = document.getElementById('outputPlaceholder');
+const artNameInput = document.getElementById('artName');
+const artTagsInput = document.getElementById('artTags');
+const saveStatus = document.getElementById('saveStatus');
+const archiveSearchInput = document.getElementById('archiveSearch');
+const archiveList = document.getElementById('archiveList');
+const archiveEmpty = document.getElementById('archiveEmpty');
+const draggableItems = Array.from(document.querySelectorAll('[data-draggable]'));
+
+let activeDrag = null;
+
+function isInteractiveTarget(target) {
+  return Boolean(target.closest('button, input, select, option, textarea, label, a, #dropZone'));
+}
+
+function updateDragTransform(element, x, y) {
+  const rotation = clamp(x * 0.04, -7, 7);
+  element.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${rotation}deg)`;
+}
+
+function stopDragging() {
+  if (!activeDrag) return;
+
+  activeDrag.element.classList.remove('dragging');
+  activeDrag.element.style.transform = 'translate3d(0px, 0px, 0) rotate(0deg)';
+  document.body.classList.remove('dragging-ui');
+  activeDrag = null;
+}
+
+function startDragging(element, event) {
+  activeDrag = {
+    element,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY
+  };
+
+  element.classList.add('dragging');
+  document.body.classList.add('dragging-ui');
+}
+
+for (const item of draggableItems) {
+  item.addEventListener('pointerdown', event => {
+    if (event.button !== 0) return;
+    if (isInteractiveTarget(event.target)) return;
+    if (activeDrag) return;
+
+    startDragging(item, event);
+  });
+}
+
+document.addEventListener('pointermove', event => {
+  if (!activeDrag || event.pointerId !== activeDrag.pointerId) return;
+
+  const deltaX = event.clientX - activeDrag.startX;
+  const deltaY = event.clientY - activeDrag.startY;
+  updateDragTransform(activeDrag.element, deltaX, deltaY);
+});
+
+document.addEventListener('pointerup', event => {
+  if (!activeDrag || event.pointerId !== activeDrag.pointerId) return;
+  stopDragging();
+});
+
+document.addEventListener('pointercancel', event => {
+  if (!activeDrag || event.pointerId !== activeDrag.pointerId) return;
+  stopDragging();
+});
+
+document.addEventListener('pointermove', event => {
+  cursorGlow.style.left = event.clientX + 'px';
+  cursorGlow.style.top = event.clientY + 'px';
+  cursorGlow.classList.add('active');
+});
+
+document.addEventListener('pointerleave', () => {
+  cursorGlow.classList.remove('active');
+});
+
+archiveSearchInput.addEventListener('input', renderArchive);
+saveBtn.addEventListener('click', saveCurrentArt);
+
+dropZone.addEventListener('dragover', event => {
+  event.preventDefault();
+  dropZone.classList.add('drag-over');
+});
+
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+
+dropZone.addEventListener('drop', event => {
+  event.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = event.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) loadFile(file);
+});
+
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) loadFile(fileInput.files[0]);
+});
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = event => {
+    const img = new Image();
+    img.onload = () => {
+      sourceImage = img;
+      originalImg.src = event.target.result;
+      dropZone.style.display = 'none';
+      originalImg.style.display = 'block';
+      convertBtn.disabled = false;
+      downloadBtn.disabled = true;
+      saveBtn.disabled = true;
+      asciiOutput.style.display = 'none';
+      asciiOutput.textContent = '';
+      outputPlaceholder.style.display = 'block';
+      currentAsciiArt = '';
+      if (!artNameInput.value.trim()) {
+        artNameInput.value = file.name.replace(/\.[^.]+$/, '');
+      }
+    };
+    img.src = event.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function slugify(value) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'ascii-art';
+}
+
+function loadLocalArchiveEntries() {
+  try {
+    const raw = localStorage.getItem(ARCHIVE_STORAGE_KEY);
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistLocalArchiveEntries() {
+  localStorage.setItem(ARCHIVE_STORAGE_KEY, JSON.stringify(archiveEntries));
+}
+
+function parseTags(rawValue) {
+  const matches = rawValue.match(/#?[a-z0-9_-]+/gi) || [];
+  return Array.from(new Set(matches.map(tag => tag.replace(/^#/, '').toLowerCase()).filter(Boolean)));
+}
+
+function buildArchiveFileName(name, createdAt) {
+  const stamp = new Date(createdAt).toISOString().replace(/[:.]/g, '-');
+  return `${slugify(name)}-${stamp}.txt`;
+}
+
+function buildArchiveText(entry) {
+  const header = [
+    `Title: ${entry.name}`,
+    entry.tags.length ? `Tags: ${entry.tags.map(tag => `#${tag}`).join(' ')}` : '',
+    `Saved: ${new Date(entry.createdAt).toLocaleString()}`,
+    ''
+  ].filter(Boolean);
+
+  return `${header.join('\n')}\n${entry.art}`;
+}
+
+function createTextDownload(content, fileName) {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.download = fileName;
+  link.href = url;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function fetchArchiveEntries() {
+  try {
+    const response = await fetch('/api/archive');
+    if (!response.ok) {
+      throw new Error('archive-fetch-failed');
+    }
+
+    archiveEntries = await response.json();
+    archiveMode = 'server';
+    renderArchive();
+    saveStatus.textContent = 'Shared archive connected. Saved ASCII art will appear for everyone using this site.';
+  } catch {
+    archiveEntries = loadLocalArchiveEntries();
+    archiveMode = 'local';
+    saveStatus.textContent = 'Server offline. The archive is running in local-only mode in this browser, and TXT files will download instead.';
+    renderArchive();
+  }
+}
+
+function buildArchiveSearchText(entry) {
+  return [
+    entry.name,
+    entry.tags.map(tag => `#${tag}`).join(' '),
+    entry.art
+  ].join(' ').toLowerCase();
+}
+
+function getFilteredArchiveEntries() {
+  const query = archiveSearchInput.value.trim().toLowerCase();
+  if (!query) return archiveEntries;
+
+  const terms = query.split(/\s+/).filter(Boolean);
+  return archiveEntries.filter(entry => {
+    const haystack = buildArchiveSearchText(entry);
+    return terms.every(term => haystack.includes(term));
+  });
+}
+
+function previewArchiveArt(art) {
+  return art.split('\n').slice(0, 12).join('\n');
+}
+
+function loadSavedEntry(entryId) {
+  const entry = archiveEntries.find(item => item.id === entryId);
+  if (!entry) return;
+
+  currentAsciiArt = entry.art;
+  asciiOutput.textContent = currentAsciiArt;
+  asciiOutput.style.display = 'block';
+  outputPlaceholder.style.display = 'none';
+  downloadBtn.disabled = false;
+  saveBtn.disabled = false;
+  artNameInput.value = entry.name;
+  artTagsInput.value = entry.tags.map(tag => `#${tag}`).join(' ');
+  showToast('Saved ASCII art loaded');
+}
+
+function createArchiveItem(entry) {
+  const item = document.createElement('article');
+  item.className = 'archive-item';
+
+  const head = document.createElement('div');
+  head.className = 'archive-item-head';
+
+  const heading = document.createElement('div');
+  const title = document.createElement('div');
+  title.className = 'archive-item-title';
+  title.textContent = entry.name;
+  const meta = document.createElement('div');
+  meta.className = 'archive-meta';
+  meta.textContent = new Date(entry.createdAt).toLocaleString();
+  heading.append(title, meta);
+
+  head.appendChild(heading);
+  item.appendChild(head);
+
+  if (entry.tags.length) {
+    const tagRow = document.createElement('div');
+    tagRow.className = 'tag-row';
+    entry.tags.forEach(tag => {
+      const chip = document.createElement('span');
+      chip.className = 'tag-chip';
+      chip.textContent = `#${tag}`;
+      tagRow.appendChild(chip);
+    });
+    item.appendChild(tagRow);
+  }
+
+  const preview = document.createElement('pre');
+  preview.className = 'archive-preview';
+  preview.textContent = previewArchiveArt(entry.art);
+  item.appendChild(preview);
+
+  const actions = document.createElement('div');
+  actions.className = 'archive-item-actions';
+
+  const loadButton = document.createElement('button');
+  loadButton.className = 'btn btn-secondary';
+  loadButton.textContent = 'Load';
+  loadButton.addEventListener('click', () => loadSavedEntry(entry.id));
+
+  const fileButton = document.createElement('button');
+  fileButton.className = 'btn btn-secondary';
+  fileButton.textContent = 'TXT';
+  fileButton.addEventListener('click', () => createTextDownload(buildArchiveText(entry), entry.fileName));
+
+  actions.append(loadButton, fileButton);
+  item.appendChild(actions);
+
+  return item;
+}
+
+function renderArchive() {
+  const filteredEntries = getFilteredArchiveEntries();
+  archiveList.innerHTML = '';
+
+  filteredEntries.forEach(entry => {
+    archiveList.appendChild(createArchiveItem(entry));
+  });
+
+  archiveEmpty.style.display = filteredEntries.length ? 'none' : 'block';
+}
+
+async function saveCurrentArt() {
+  if (!currentAsciiArt) return;
+
+  const name = artNameInput.value.trim() || `ASCII Art ${archiveEntries.length + 1}`;
+  const tags = parseTags(artTagsInput.value);
+  const createdAt = new Date().toISOString();
+  const draftEntry = {
+    name,
+    tags,
+    art: currentAsciiArt,
+    createdAt,
+    fileName: buildArchiveFileName(name, createdAt)
+  };
+
+  if (archiveMode !== 'server') {
+    const localEntry = {
+      id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      ...draftEntry
+    };
+
+    archiveEntries.unshift(localEntry);
+    persistLocalArchiveEntries();
+    renderArchive();
+    createTextDownload(buildArchiveText(localEntry), localEntry.fileName);
+    saveStatus.textContent = 'Saved locally in this browser. Because the server is offline, the TXT file was downloaded.';
+    showToast('Saved locally');
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/archive', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(draftEntry)
+    });
+
+    if (!response.ok) {
+      throw new Error('archive-save-failed');
+    }
+
+    const savedEntry = await response.json();
+    archiveEntries.unshift(savedEntry);
+    renderArchive();
+    saveStatus.textContent = `Uploaded to the shared archive and saved on the server as ${savedEntry.fileName}.`;
+    showToast('Art uploaded to shared archive');
+  } catch {
+    const localEntry = {
+      id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      ...draftEntry
+    };
+
+    archiveMode = 'local';
+    archiveEntries.unshift(localEntry);
+    persistLocalArchiveEntries();
+    renderArchive();
+    createTextDownload(buildArchiveText(localEntry), localEntry.fileName);
+    saveStatus.textContent = 'Server save failed, so the art was saved locally in this browser and the TXT file was downloaded.';
+    showToast('Saved locally instead');
+  }
+}
+
+// ── Slider display ──────────────────────────────────────────────────────
+document.getElementById('asciiWidth').addEventListener('input', function() {
+  document.getElementById('asciiWidthVal').textContent = this.value;
+});
+
+document.getElementById('brightness').addEventListener('input', function() {
+  document.getElementById('brightnessVal').textContent = this.value;
+});
+
+document.getElementById('contrast').addEventListener('input', function() {
+  document.getElementById('contrastVal').textContent = this.value + '%';
+});
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function luminance(r, g, b) {
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+function mapPixelToCharacter(lightness, chars) {
+  const index = Math.round((lightness / 255) * (chars.length - 1));
+  return chars[index] ?? chars[chars.length - 1];
+}
+
+function updateAsciiTypography(width) {
+  const fontSize = clamp(900 / width, 5, 11);
+  asciiOutput.style.fontSize = fontSize + 'px';
+  asciiOutput.style.lineHeight = String(fontSize * 0.82) + 'px';
+}
+
+function buildAsciiArt(imageData, width, height, chars, brightness, contrast) {
+  const rows = [];
+  const contrastFactor = contrast / 100;
+
+  for (let y = 0; y < height; y++) {
+    let line = '';
+
+    for (let x = 0; x < width; x++) {
+      const index = (y * width + x) * 4;
+      const alpha = imageData.data[index + 3] / 255;
+
+      if (alpha < 0.1) {
+        line += ' ';
+        continue;
+      }
+
+      const baseLightness = luminance(
+        imageData.data[index],
+        imageData.data[index + 1],
+        imageData.data[index + 2]
+      );
+
+      const adjusted = clamp(((baseLightness - 128) * contrastFactor) + 128 + brightness, 0, 255);
+      const composited = 255 - ((255 - adjusted) * alpha);
+      line += mapPixelToCharacter(composited, chars);
+    }
+
+    rows.push(line.replace(/\s+$/g, ''));
+  }
+
+  return rows.join('\n');
+}
+
+// ── Core convert ────────────────────────────────────────────────────────
+function convert() {
+  if (!sourceImage) return;
+
+  processing.classList.add('show');
+  convertBtn.disabled = true;
+
+  setTimeout(() => {
+    const targetWidth = parseInt(document.getElementById('asciiWidth').value, 10);
+    const brightness = parseInt(document.getElementById('brightness').value, 10);
+    const contrast = parseInt(document.getElementById('contrast').value, 10);
+    const charsetKey = document.getElementById('charset').value;
+    const chars = CHARSETS[charsetKey] || CHARSETS.classic;
+    const srcW = sourceImage.naturalWidth;
+    const srcH = sourceImage.naturalHeight;
+    const aspectRatio = srcH / srcW;
+    const targetHeight = Math.max(1, Math.round(targetWidth * aspectRatio * 0.55));
+
+    const context = workCanvas.getContext('2d', { willReadFrequently: true });
+    workCanvas.width = targetWidth;
+    workCanvas.height = targetHeight;
+    context.clearRect(0, 0, targetWidth, targetHeight);
+    context.drawImage(sourceImage, 0, 0, targetWidth, targetHeight);
+
+    const imageData = context.getImageData(0, 0, targetWidth, targetHeight);
+    currentAsciiArt = buildAsciiArt(imageData, targetWidth, targetHeight, chars, brightness, contrast);
+
+    updateAsciiTypography(targetWidth);
+    asciiOutput.textContent = currentAsciiArt;
+    asciiOutput.style.display = 'block';
+    outputPlaceholder.style.display = 'none';
+    downloadBtn.disabled = false;
+    saveBtn.disabled = false;
+    processing.classList.remove('show');
+    convertBtn.disabled = false;
+    showToast('ASCII art ready ✦');
+  }, 80);
+}
+
+// ── Download ─────────────────────────────────────────────────────────────
+function downloadArt() {
+  if (!currentAsciiArt) return;
+
+  const blob = new Blob([currentAsciiArt], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.download = 'asciicraft-art.txt';
+  link.href = url;
+  link.click();
+  URL.revokeObjectURL(url);
+  showToast('ASCII text downloaded');
+}
+
+// ── Reset ─────────────────────────────────────────────────────────────────
+function reset() {
+  sourceImage = null;
+  currentAsciiArt = '';
+  fileInput.value = '';
+  originalImg.style.display = 'none';
+  originalImg.src = '';
+  dropZone.style.display = 'flex';
+  asciiOutput.style.display = 'none';
+  asciiOutput.textContent = '';
+  outputPlaceholder.style.display = 'block';
+  convertBtn.disabled = true;
+  downloadBtn.disabled = true;
+  saveBtn.disabled = true;
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2400);
+}
+
+renderArchive();
+fetchArchiveEntries();
+</script>
+</body>
+</html>
